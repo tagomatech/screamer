@@ -123,6 +123,18 @@ Fills on bars, the trade tape, and top-of-book quotes.
 :::
 ```
 
+## Commodity futures
+
+```{grid} 1 2 2 2
+:gutter: 3
+
+:::{grid-item-card} Commodity futures: liquidity, releases, and curve risk
+:link: 19-commodity-futures-liquidity-and-event-risk
+:link-type: doc
+Build causal liquidity, fundamental-release, and calendar-spread workflows.
+:::
+```
+
 ## Filtering & forecasting
 
 ```{grid} 1 2 2 2
@@ -174,4 +186,5 @@ Build a leak-safe training set with `forecast_pairs`, fit, and backtest.
 16-supervised-forecasting
 17-filtering-and-forecasting-with-uncertainty
 18-pairs-and-mean-reversion
+19-commodity-futures-liquidity-and-event-risk
 ```
