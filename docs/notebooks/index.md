@@ -128,10 +128,10 @@ Fills on bars, the trade tape, and top-of-book quotes.
 ```{grid} 1 2 2 2
 :gutter: 3
 
-:::{grid-item-card} Commodity futures: liquidity, releases, and curve risk
+:::{grid-item-card} Commodity futures: liquidity, quote freshness, and curve risk
 :link: 19-commodity-futures-liquidity-and-event-risk
 :link-type: doc
-Build causal liquidity, fundamental-release, and calendar-spread workflows.
+Build causal liquidity, quote-freshness, and calendar-spread workflows.
 :::
 ```
 
