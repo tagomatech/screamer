@@ -21,10 +21,12 @@ SCHEMA_VERSION = 1
 # lowercase keys: backward compat for graphs serialized before step 3E.
 _OPERATORS = {
     "CombineLatest": streams.combine_latest,
+    "Delay": streams.delay,
     "Dropna": streams.dropna,
     "Select": streams.select,
     "Resample": streams.resample,
     "combine_latest": streams.combine_latest,
+    "delay": streams.delay,
     "dropna": streams.dropna,
     "select": streams.select,
     "resample": streams.resample,

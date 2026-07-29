@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 
 from screamer import RollingMean, EwMean, RollingMinMax, Sub, Input, Pipeline
-from screamer.streams import CombineLatest, Dropna, Resample, Select
+from screamer.streams import CombineLatest, Delay, Dropna, Resample, Select
 
 
 def _rich_dag(align_outputs):
@@ -152,6 +152,18 @@ def test_select_numpy_columns_round_trip():
     json.dumps(dag.to_dict())  # numpy array columns coerced to a list
     fa, fb = _feeds()
     assert _equal(dag(fa, fb), Pipeline.from_json(dag.to_json())(fa, fb))
+
+
+def test_delay_round_trip():
+    events = Input("events")
+    dag = Pipeline([events], [Delay(5)(events)])
+    node = [n for n in dag.to_dict()["nodes"] if n["kind"] == "operator"][0]
+    assert node["op"] == "Delay"
+    assert node["params"] == {"duration": 5}
+
+    feed = (np.array([10.0, 20.0, 30.0]), np.array([2, 7, 11]))
+    rebuilt = Pipeline.from_json(dag.to_json())
+    assert _equal(dag(feed), rebuilt(feed))
 
 
 def test_from_dict_positional_args_fallback():
