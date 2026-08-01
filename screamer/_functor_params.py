@@ -11,6 +11,7 @@ against the C++ class, and the Pipeline graph-building hook -- is inherited unch
 The captured params power three things: a readable ``repr``
 (``RollingMean(window_size=20)``), Pipeline node labels, and Pipeline serialization.
 """
+import inspect
 import json
 import warnings
 from importlib import resources
@@ -47,6 +48,35 @@ def _param_names(cls_name):
     if not entry:
         return None
     return [p["name"] for p in entry.get("parameters", [])]
+
+
+def _signature_from_help(cls_name):
+    """Build an inspect signature from the generated parameter registry.
+
+    The native pybind11 constructor exposes its signature in ``__doc__`` but
+    ``inspect.signature`` cannot recover it from the builtin method. Exposing
+    the generated signature improves IDE completion and makes invalid
+    keyword names discoverable before the native constructor is called.
+    """
+    entry = _load_help().get(cls_name)
+    if not entry:
+        return None
+
+    parameters = []
+    ew_parameters = entry.get("implementation_family") == "ew"
+    for spec in entry.get("parameters", []):
+        # The registry stores span=20 as a representative frontend example,
+        # but EW bindings require the caller to choose exactly one decay
+        # parameter. Keep the inspect signature aligned with the native API.
+        default = None if ew_parameters else spec.get("default", inspect.Parameter.empty)
+        parameters.append(
+            inspect.Parameter(
+                spec["name"],
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                default=default,
+            )
+        )
+    return inspect.Signature(parameters)
 
 
 def bind_params(cls_name, args, kwargs):
@@ -99,6 +129,9 @@ def _make_wrapper(name, base):
     __init__.__doc__ = getattr(base.__init__, "__doc__", None)
     cls.__init__ = __init__
     cls.__repr__ = __repr__
+    signature = _signature_from_help(name)
+    if signature is not None:
+        cls.__signature__ = signature
     cls._screamer_wrapped = True
     return cls
 

@@ -51,6 +51,10 @@ where $\text{EwMean}[t] = S_x / S_w$ and $\text{EwStd}[t] = \sqrt{\text{EwVar}[t
 
 One of the following decay parameters is required to calculate `alpha`, where a higher `alpha` value gives recent points more influence:
 
+`EwZscore` is an exponentially weighted operator and therefore uses `span`,
+`com`, `halflife`, or `alpha`; it does not use the `window_size` argument used
+by trailing-window operators such as `RollingZscore`.
+
 - **`com`**: Center of mass. `alpha = 1 / (1 + com)`
 - **`span`**: Span. `alpha = 2 / (span + 1)`
 - **`halflife`**: Half-life. `alpha = 1 - exp(-log(2) / halflife)`

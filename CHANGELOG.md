@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented in this file.
 
+Unreleased
+----------
+
+### Changed
+
+* Python functor wrappers now expose constructor signatures through
+  `inspect.signature`, improving IDE completion and making invalid keywords such
+  as `window_size` on EW operators discoverable before native construction.
+  EW signatures retain the native optional decay parameters; exactly one of
+  `com`, `span`, `halflife`, or `alpha` is still required at construction time.
+
 1.1.1 - 2026-07-29
 ------------
 
