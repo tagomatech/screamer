@@ -7,6 +7,12 @@ Unreleased
 
 ### Added
 
+* portfolio_ohlc_target(...) runs the causal OHLC target engine across
+  multiple instrument columns, returning fixed-shape (T, A, 4) asset state
+  plus a vectorized portfolio state with contract exposure, margin, turnover,
+  and drawdown. Shared cash and cross-asset execution ordering remain explicit
+  follow-up work.
+
 * `Resample(..., clock=True, agg='last', fill='carry', max_age=N)` bounds the
   age of a carried scalar value in a target-clock as-of join. Once its age
   exceeds `N`, the output is `NaN`; omitting `max_age` retains unbounded carry.

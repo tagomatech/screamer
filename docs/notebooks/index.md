@@ -133,6 +133,12 @@ Fills on bars, the trade tape, and top-of-book quotes.
 :link-type: doc
 Build causal liquidity, quote-freshness, and calendar-spread workflows.
 :::
+
+:::{grid-item-card} Multi-asset commodity portfolio
+:link: 20-multi-asset-commodity-portfolio
+:link-type: doc
+Run a causal, contract-multiplier-aware portfolio backtest across two commodity futures.
+:::
 ```
 
 ## Filtering & forecasting
@@ -187,4 +193,5 @@ Build a leak-safe training set with `forecast_pairs`, fit, and backtest.
 17-filtering-and-forecasting-with-uncertainty
 18-pairs-and-mean-reversion
 19-commodity-futures-liquidity-and-event-risk
+20-multi-asset-commodity-portfolio
 ```

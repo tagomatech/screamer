@@ -8505,6 +8505,18 @@
     "details": "Free helper: converts the screamer `(values, index)` tuple convention to a\npandas Series (1-D) or DataFrame (2-D). Pass `columns` to label a 2-D result.\nA positional stream (`index=None`) gets pandas' default RangeIndex.",
     "examples": []
   },
+  "portfolio_ohlc_target": {
+    "name": "portfolio_ohlc_target",
+    "title": "Multi-asset OHLC target backtest",
+    "kind": "function",
+    "short": "Causal multi-asset target backtest with fixed-shape contract and portfolio arrays.",
+    "topics": [
+      "backtesting"
+    ],
+    "covers": [],
+    "details": "portfolio_ohlc_target applies the causal OHLC target engine to several instrument columns in one vectorized call. It returns fixed-shape asset and aggregate portfolio arrays; shared cash and cross-asset execution ordering are intentionally separate follow-up features.",
+    "examples": []
+  },
   "forecast_pairs": {
     "name": "forecast_pairs",
     "title": "forecast_pairs",
