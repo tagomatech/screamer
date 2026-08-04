@@ -127,6 +127,12 @@ From a position signal to a costed equity curve.
 :link-type: doc
 Fills on bars, the trade tape, and top-of-book quotes.
 :::
+
+:::{grid-item-card} Multi-asset portfolio reports
+:link: 20-multi-asset-portfolio-report
+:link-type: doc
+Reduce contract-aware multi-leg backtests into causal portfolio statistics.
+:::
 ```
 
 ## Filtering & forecasting
@@ -181,4 +187,5 @@ Build a leak-safe training set with `forecast_pairs`, fit, and backtest.
 17-filtering-and-forecasting-with-uncertainty
 18-pairs-and-mean-reversion
 19-cycle-and-spectral-analysis
+20-multi-asset-portfolio-report
 ```
