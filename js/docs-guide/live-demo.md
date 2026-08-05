@@ -49,3 +49,9 @@ The demo is a single self-contained HTML file at
 It loads screamer from a CDN, so it needs internet access for both the module and the trade feed.
 If the chart stays empty, the default exchange may be restricted in your region; switch the feed
 selector to the other exchange.
+
+## Trade-flow lab
+
+The [trade-flow lab](https://screamer-labs.github.io/screamer/live-order-flow.html) uses the same public feeds but focuses on microstructure. It normalizes venue aggressor flags (with a tick-rule fallback), then lets you switch between VPIN, rolling signed flow, and the trade-price-only RollSpread operator. The replay control sends the captured tape through freshly reset operators, making causal streaming behavior visible without adding a feed-specific API to Screamer.
+
+The source is [js/examples/live-order-flow.html](https://github.com/screamer-labs/screamer/blob/main/js/examples/live-order-flow.html).

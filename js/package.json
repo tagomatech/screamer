@@ -56,7 +56,7 @@
     "pack-smoke": "bash scripts/pack-smoke.sh",
     "test": "node --import tsx --test test/*.test.ts",
     "docs": "npm run build:wasm:single && typedoc && npm run build:esm && npm run docs:demo",
-    "docs:demo": "mkdir -p docs-site/vendor/screamer/generated && esbuild dist/index.js --bundle --format=esm --target=es2017 --outfile=docs-site/vendor/screamer/index.js && cp dist/generated/screamer.mjs docs-site/vendor/screamer/generated/screamer.mjs && cp examples/live-trades.html docs-site/live-trades.html"
+    "docs:demo": "mkdir -p docs-site/vendor/screamer/generated && esbuild dist/index.js --bundle --format=esm --target=es2017 --outfile=docs-site/vendor/screamer/index.js && cp dist/generated/screamer.mjs docs-site/vendor/screamer/generated/screamer.mjs && cp examples/live-trades.html docs-site/live-trades.html && cp examples/live-order-flow.html docs-site/live-order-flow.html"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

@@ -1,0 +1,436 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>screamer.js — live trade-flow lab</title>
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --line: #232a33;
+    --fg: #e6edf3; --muted: #8b949e;
+    --raw: #c9d1d9; --metric: #f5a623;
+    --buy: #3fb950; --sell: #f85149; --warn: #d29922;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg); color: var(--fg);
+    font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    display: flex; flex-direction: column; min-height: 100%;
+  }
+  header { padding: 16px 20px 8px; }
+  h1 { margin: 0; font-size: 17px; font-weight: 650; letter-spacing: .2px; }
+  h1 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #58a6ff; }
+  .sub { color: var(--muted); font-size: 12.5px; margin-top: 3px; max-width: 930px; }
+  .bar {
+    display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center;
+    padding: 6px 20px 12px;
+  }
+  .bar label { color: var(--muted); font-size: 12px; margin-right: 5px; }
+  select, button {
+    background: var(--panel); color: var(--fg); border: 1px solid var(--line);
+    border-radius: 6px; padding: 5px 9px; font-size: 12.5px; cursor: pointer;
+  }
+  button:hover, select:hover { border-color: #3d4653; }
+  button:disabled { color: #57606a; cursor: default; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 7px;
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 999px; padding: 4px 11px; font-size: 12px; color: var(--muted);
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .dot.live { background: var(--buy); box-shadow: 0 0 0 3px rgba(63,185,80,.18); }
+  .dot.connecting { background: var(--warn); }
+  .dot.dead { background: var(--sell); }
+  .price { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; color: var(--fg); }
+  .grow { flex: 1; }
+  #wrap { flex: 1; padding: 0 12px 4px; min-height: 310px; position: relative; }
+  canvas { width: 100%; height: 100%; display: block; }
+  #overlay {
+    position: absolute; inset: 0; display: none; align-items: center; justify-content: center;
+    text-align: center; padding: 24px; color: var(--muted);
+  }
+  #overlay .box { max-width: 520px; }
+  #overlay code { color: #f0883e; font-family: ui-monospace, Menlo, monospace; }
+  .legend {
+    display: flex; flex-wrap: wrap; gap: 8px 18px; padding: 8px 20px 4px;
+  }
+  .lg { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; }
+  .sw { width: 22px; height: 3px; border-radius: 2px; }
+  .lg .nm { color: var(--muted); }
+  .lg .vl { font-family: ui-monospace, Menlo, monospace; min-width: 66px; }
+  footer { color: var(--muted); font-size: 11.5px; padding: 4px 20px 14px; }
+  footer a { color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+  <header>
+    <h1><span class="mono">screamer.js</span> &nbsp;·&nbsp; live trade-flow lab</h1>
+    <div class="sub">
+      One causal stream, several microstructure views: trade direction, signed volume, volume-clock
+      toxicity, and the Roll spread estimate. Switch the classifier or metric, then replay the observed
+      tape through the same WebAssembly operators.
+    </div>
+  </header>
+
+  <div class="bar">
+    <span><label>feed</label>
+      <select id="source">
+        <option value="coinbase">Coinbase · BTC-USD</option>
+        <option value="binance">Binance · BTC/USDT</option>
+      </select>
+    </span>
+    <span><label>metric</label>
+      <select id="metric">
+        <option value="vpin" selected>VPIN · volume-clock toxicity</option>
+        <option value="flow">signed flow · rolling sum</option>
+        <option value="spread">Roll spread · trade prices only</option>
+      </select>
+    </span>
+    <span><label>classifier</label>
+      <select id="classifier">
+        <option value="venue" selected>venue aggressor flag · tick fallback</option>
+        <option value="tick">tick rule</option>
+      </select>
+    </span>
+    <span><label>window</label>
+      <select id="window">
+        <option value="60">60 trades</option>
+        <option value="120" selected>120 trades</option>
+        <option value="240">240 trades</option>
+      </select>
+    </span>
+    <span><label>bucket</label>
+      <select id="bucket">
+        <option value="0.1">0.1 asset units</option>
+        <option value="0.5" selected>0.5 asset units</option>
+        <option value="1">1 asset unit</option>
+      </select>
+    </span>
+    <button id="pause">Pause</button>
+    <button id="replay" disabled>Replay tape</button>
+    <button id="reset">Reset</button>
+    <span class="grow"></span>
+    <span class="pill"><span id="dot" class="dot"></span><span id="status">starting…</span></span>
+    <span class="pill">last <span id="last" class="price">—</span></span>
+    <span class="pill"><span id="rate">0</span> trades/s</span>
+  </div>
+
+  <div id="wrap">
+    <canvas id="chart"></canvas>
+    <div id="overlay"><div class="box"></div></div>
+  </div>
+
+  <div class="legend" id="legend"></div>
+
+  <footer>
+    Powered by <a href="https://www.npmjs.com/package/@screamer-labs/screamer" target="_blank" rel="noopener">@screamer-labs/screamer</a>,
+    loaded from a same-origin bundle or CDN. Coinbase and Binance messages are normalized in the demo;
+    the Screamer operators remain feed- and asset-agnostic. Venue signs are taker directions, with the
+    tick rule available when a feed has only price and size.
+  </footer>
+
+<script type="module">
+const SOURCES = [
+  new URL("./vendor/screamer/index.js", import.meta.url).href,
+  "https://cdn.jsdelivr.net/npm/@screamer-labs/screamer@2.2.0/dist/index.js",
+  "https://esm.sh/@screamer-labs/screamer@2.2.0",
+];
+async function loadScreamer() {
+  const errs = [];
+  for (const url of SOURCES) {
+    try { return await import(url); }
+    catch (e) {
+      const where = url.startsWith("http") ? new URL(url).host : "same-origin";
+      errs.push(where + " — " + String((e && e.message) || e));
+    }
+  }
+  throw new Error(errs.join("\n"));
+}
+
+const overlay = document.getElementById("overlay");
+function fail(html) {
+  overlay.querySelector(".box").innerHTML = html;
+  overlay.style.display = "flex";
+}
+
+let S;
+try {
+  S = await loadScreamer();
+  await S.ready();
+} catch (e) {
+  const detail = String((e && e.message) || e)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/\n/g, "<br>");
+  fail(`Could not load <code>@screamer-labs/screamer</code>.<br><br>` +
+       `This page needs internet access for the module and the trade feed.<br><br>` +
+       `<small style="color:#f0883e">${detail}</small>`);
+  throw e;
+}
+
+const MAX_TAPE = 2000;
+let displayN = 120;
+let metricName = "vpin";
+let classifierName = "venue";
+let bucketVolume = 0.5;
+let prices = [], metricValues = [], signs = [];
+let tape = [];
+let tickSign, metricOp;
+let paused = false, replaying = false, replayToken = 0, dirty = true;
+const arrivals = [];
+
+function buildOperators() {
+  if (tickSign) tickSign.dispose();
+  if (metricOp) metricOp.dispose();
+  tickSign = S.TickRuleSign();
+  if (metricName === "vpin") metricOp = S.VPIN(bucketVolume, 20);
+  else if (metricName === "flow") metricOp = S.RollingSum(displayN, "expanding");
+  else metricOp = S.RollSpread(displayN, "strict");
+}
+
+function resetSeries() {
+  prices = []; metricValues = []; signs = [];
+  buildOperators(); dirty = true;
+}
+
+function signFor(event) {
+  // Advance the tick-rule state even when a venue flag is available. This
+  // makes switching classifiers and replaying the tape deterministic.
+  const tick = tickSign(event.price);
+  return classifierName === "venue" && Number.isFinite(event.venueSign) ? event.venueSign : tick;
+}
+
+function processTrade(event, recordArrival = true) {
+  const sign = signFor(event);
+  let value;
+  if (metricName === "spread") {
+    value = metricOp(event.price);
+  } else {
+    const valid = Number.isFinite(sign) && Number.isFinite(event.size);
+    const signed = valid ? sign * event.size : NaN;
+    if (metricName === "flow") value = metricOp(signed);
+    else value = valid ? metricOp(sign > 0 ? event.size : 0, sign < 0 ? event.size : 0) : metricOp(NaN, NaN);
+  }
+  if (recordArrival) arrivals.push(performance.now());
+  prices.push(event.price); metricValues.push(value); signs.push(sign);
+  while (prices.length > displayN) {
+    prices.shift(); metricValues.shift(); signs.shift();
+  }
+  document.getElementById("last").textContent = fmt(event.price);
+  document.getElementById("replay").disabled = tape.length < 2 || replaying;
+  dirty = true;
+}
+
+function rebuildFromTape() {
+  resetSeries();
+  for (const event of tape) processTrade(event, false);
+}
+
+function clearAll() {
+  replayToken++;
+  replaying = false;
+  paused = false;
+  document.getElementById("pause").textContent = "Pause";
+  arrivals.length = 0;
+  tape = [];
+  resetSeries();
+  document.getElementById("replay").disabled = true;
+}
+
+// ---------------------------------------------------------------------------
+// Public trade feeds. Both adapters return the same {price, size, venueSign}
+// shape. Coinbase's side is the taker's direction; Binance's `m` means the
+// buyer was maker, so the aggressor was the seller when it is true.
+// ---------------------------------------------------------------------------
+const FEEDS = {
+  coinbase: {
+    label: "Coinbase BTC-USD", url: "wss://ws-feed.exchange.coinbase.com",
+    onopen: (ws) => ws.send(JSON.stringify({ type: "subscribe", product_ids: ["BTC-USD"], channels: ["matches"] })),
+    parse: (m) => {
+      if (m.type !== "match" && m.type !== "last_match") return null;
+      const side = m.side === "buy" ? 1 : m.side === "sell" ? -1 : NaN;
+      return { price: Number(m.price), size: Number(m.size), venueSign: side };
+    },
+  },
+  binance: {
+    label: "Binance BTC/USDT", url: "wss://stream.binance.com:9443/ws/btcusdt@trade", onopen: null,
+    parse: (m) => m.e === "trade" ? { price: Number(m.p), size: Number(m.q), venueSign: m.m ? -1 : 1 } : null,
+  },
+};
+
+let ws = null, source = "coinbase", retry = 0, reconnectTimer = null;
+function setStatus(state, text) {
+  document.getElementById("dot").className = "dot " + (state || "");
+  document.getElementById("status").textContent = text;
+}
+function connect() {
+  clearTimeout(reconnectTimer);
+  const feed = FEEDS[source];
+  setStatus("connecting", "connecting to " + feed.label + "…");
+  let sock;
+  try { sock = new WebSocket(feed.url); }
+  catch (e) { scheduleReconnect(); return; }
+  ws = sock;
+  sock.onopen = () => {
+    retry = 0;
+    if (feed.onopen) feed.onopen(sock);
+    setStatus("live", "live · " + feed.label);
+  };
+  sock.onmessage = (ev) => {
+    let m; try { m = JSON.parse(ev.data); } catch { return; }
+    const event = feed.parse(m);
+    if (!event || !Number.isFinite(event.price) || !Number.isFinite(event.size) || event.size < 0) return;
+    tape.push(event);
+    while (tape.length > MAX_TAPE) tape.shift();
+    document.getElementById("replay").disabled = tape.length < 2 || replaying;
+    if (!paused && !replaying) processTrade(event);
+  };
+  sock.onerror = () => { try { sock.close(); } catch {} };
+  sock.onclose = () => {
+    if (sock !== ws) return;
+    setStatus("dead", "disconnected · retrying…");
+    scheduleReconnect();
+  };
+}
+function scheduleReconnect() {
+  retry = Math.min(retry + 1, 6);
+  reconnectTimer = setTimeout(connect, 400 * retry);
+}
+function switchFeed(next) {
+  source = next;
+  if (ws) { ws.onclose = null; try { ws.close(); } catch {} ws = null; }
+  clearAll(); connect();
+}
+
+async function replay() {
+  if (tape.length < 2 || replaying) return;
+  const token = ++replayToken;
+  const snapshot = tape.slice();
+  replaying = true; paused = true;
+  document.getElementById("pause").textContent = "Resume";
+  document.getElementById("replay").disabled = true;
+  setStatus("connecting", "replaying " + snapshot.length + " trades…");
+  resetSeries();
+  for (let i = 0; i < snapshot.length; i++) {
+    if (token !== replayToken) return;
+    processTrade(snapshot[i], false);
+    if (i % 24 === 0) await new Promise((resolve) => requestAnimationFrame(resolve));
+  }
+  replaying = false; paused = false;
+  document.getElementById("pause").textContent = "Pause";
+  document.getElementById("replay").disabled = false;
+  setStatus("live", "live · " + FEEDS[source].label);
+}
+
+// ---------------------------------------------------------------------------
+// Canvas rendering. The top panel is price; the lower panel is the selected
+// causal metric. Trade signs are shown as a compact pressure strip.
+// ---------------------------------------------------------------------------
+const canvas = document.getElementById("chart"), ctx = canvas.getContext("2d");
+let cssW = 0, cssH = 0, dpr = 1;
+function resize() {
+  const r = canvas.getBoundingClientRect();
+  cssW = Math.max(320, r.width); cssH = Math.max(300, r.height);
+  dpr = window.devicePixelRatio || 1;
+  canvas.width = Math.round(cssW * dpr); canvas.height = Math.round(cssH * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0); dirty = true;
+}
+window.addEventListener("resize", resize);
+const PADL = 12, PADR = 84, PADT = 14, PADB = 22, GAP = 20;
+function fmt(v) {
+  if (!Number.isFinite(v)) return "—";
+  return v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+}
+function finiteExtents(values, fallback = [0, 1]) {
+  const finite = values.filter(Number.isFinite);
+  if (!finite.length) return fallback;
+  let lo = Math.min(...finite), hi = Math.max(...finite);
+  if (hi - lo < 1e-12) { const pad = Math.max(Math.abs(hi) * 0.02, 1); lo -= pad; hi += pad; }
+  else { const pad = (hi - lo) * 0.08; lo -= pad; hi += pad; }
+  return [lo, hi];
+}
+function lastFinite(values) {
+  for (let i = values.length - 1; i >= 0; i--) if (Number.isFinite(values[i])) return values[i];
+  return NaN;
+}
+function drawLine(values, color, width, alpha, X, Y) {
+  ctx.strokeStyle = color; ctx.lineWidth = width; ctx.globalAlpha = alpha;
+  ctx.lineJoin = "round"; ctx.beginPath(); let pen = false;
+  for (let i = 0; i < values.length; i++) {
+    const v = values[i]; if (!Number.isFinite(v)) { pen = false; continue; }
+    const x = X(i), y = Y(v);
+    if (pen) ctx.lineTo(x, y); else { ctx.moveTo(x, y); pen = true; }
+  }
+  ctx.stroke(); ctx.globalAlpha = 1;
+}
+function grid(y0, h, lo, hi, label) {
+  ctx.strokeStyle = "#232a33"; ctx.fillStyle = "#8b949e"; ctx.lineWidth = 1;
+  ctx.font = "11px ui-monospace, Menlo, monospace"; ctx.textAlign = "left";
+  const rows = 3;
+  for (let k = 0; k <= rows; k++) {
+    const y = y0 + (k / rows) * h;
+    ctx.beginPath(); ctx.moveTo(PADL, y); ctx.lineTo(cssW - PADR, y); ctx.stroke();
+    ctx.fillText(fmt(hi - (k / rows) * (hi - lo)), cssW - PADR + 8, y + 3);
+  }
+  ctx.fillStyle = "#8b949e"; ctx.font = "11px -apple-system, sans-serif"; ctx.fillText(label, PADL, y0 + 12);
+}
+function render() {
+  requestAnimationFrame(render);
+  const now = performance.now();
+  while (arrivals.length && now - arrivals[0] > 1000) arrivals.shift();
+  document.getElementById("rate").textContent = arrivals.length;
+  if (!dirty) return;
+  dirty = false; ctx.clearRect(0, 0, cssW, cssH);
+  const plotW = cssW - PADL - PADR, totalH = cssH - PADT - PADB;
+  const topH = Math.max(115, totalH * 0.56), pressureH = 18, bottomH = totalH - topH - GAP;
+  if (prices.length < 2) {
+    ctx.fillStyle = "#8b949e"; ctx.font = "13px -apple-system, sans-serif"; ctx.textAlign = "center";
+    ctx.fillText("waiting for trades…", PADL + plotW / 2, PADT + topH / 2); return;
+  }
+  const len = prices.length, step = plotW / Math.max(displayN - 1, 1);
+  const X = (i) => PADL + plotW - (len - 1 - i) * step;
+  const [plo, phi] = finiteExtents(prices);
+  const [mlo, mhi] = metricName === "vpin" ? [0, 1] : finiteExtents(metricValues, [-1, 1]);
+  const PY = (v) => PADT + (1 - (v - plo) / (phi - plo)) * topH;
+  const MY = (v) => PADT + topH + GAP + (1 - (v - mlo) / (mhi - mlo)) * bottomH;
+  grid(PADT, topH, plo, phi, "price");
+  grid(PADT + topH + GAP, bottomH, mlo, mhi,
+       metricName === "vpin" ? "VPIN [0, 1]" : metricName === "flow" ? "signed volume" : "Roll spread");
+  ctx.save(); ctx.beginPath(); ctx.rect(PADL, PADT, plotW, totalH); ctx.clip();
+  drawLine(prices, "#c9d1d9", 1.2, 0.75, X, PY);
+  drawLine(metricValues, "#f5a623", 1.8, 1, X, MY);
+  // A small buy/sell pressure strip keeps direction visible without competing
+  // with the selected metric. It is deliberately not treated as a price axis.
+  const stripY = PADT + topH + GAP - pressureH - 2;
+  for (let i = 0; i < signs.length; i++) {
+    if (!Number.isFinite(signs[i])) continue;
+    ctx.fillStyle = signs[i] > 0 ? "#3fb950" : "#f85149";
+    ctx.globalAlpha = 0.72; ctx.fillRect(X(i) - Math.max(1, step * 0.45), stripY, Math.max(1, step * 0.9), pressureH);
+  }
+  ctx.globalAlpha = 1; ctx.restore();
+  const current = lastFinite(metricValues);
+  document.getElementById("legend").innerHTML =
+    `<span class="lg"><span class="sw" style="background:#c9d1d9"></span><span class="nm">raw price</span><span class="vl">${fmt(lastFinite(prices))}</span></span>` +
+    `<span class="lg"><span class="sw" style="background:#f5a623"></span><span class="nm">${metricLabel()}</span><span class="vl">${fmt(current)}</span></span>` +
+    `<span class="lg"><span class="sw" style="background:#3fb950"></span><span class="nm">buy</span></span>` +
+    `<span class="lg"><span class="sw" style="background:#f85149"></span><span class="nm">sell</span></span>`;
+}
+function metricLabel() {
+  return metricName === "vpin" ? "VPIN" : metricName === "flow" ? "signed flow" : "Roll spread";
+}
+
+document.getElementById("source").addEventListener("change", (e) => switchFeed(e.target.value));
+document.getElementById("metric").addEventListener("change", (e) => { if (!replaying) { metricName = e.target.value; rebuildFromTape(); } });
+document.getElementById("classifier").addEventListener("change", (e) => { if (!replaying) { classifierName = e.target.value; rebuildFromTape(); } });
+document.getElementById("window").addEventListener("change", (e) => { if (!replaying) { displayN = parseInt(e.target.value, 10); rebuildFromTape(); } });
+document.getElementById("bucket").addEventListener("change", (e) => { if (!replaying) { bucketVolume = parseFloat(e.target.value); if (metricName === "vpin") rebuildFromTape(); } });
+document.getElementById("pause").addEventListener("click", (e) => {
+  if (replaying) return;
+  paused = !paused; e.target.textContent = paused ? "Resume" : "Pause";
+});
+document.getElementById("replay").addEventListener("click", replay);
+document.getElementById("reset").addEventListener("click", clearAll);
+
+buildOperators(); resize(); connect(); requestAnimationFrame(render);
+</script>
+</body>
+</html>

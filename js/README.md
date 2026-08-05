@@ -100,6 +100,8 @@ Watch the smoothing operators run on a live exchange trade feed in the browser:
 [screamer-labs.github.io/screamer/live-trades.html](https://screamer-labs.github.io/screamer/live-trades.html).
 The self-contained source is [`examples/live-trades.html`](examples/live-trades.html).
 
+The [trade-flow lab](https://screamer-labs.github.io/screamer/live-order-flow.html) is a second self-contained showcase for trade signing, VPIN, rolling signed flow, and replaying a captured tape through the same streaming operators. Its source is [examples/live-order-flow.html](examples/live-order-flow.html).
+
 ## Learn more
 
 The JavaScript reference and guide are at
