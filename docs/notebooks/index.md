@@ -51,6 +51,18 @@ Dominant cycle, phase, and adaptive smoothing via the Hilbert transform.
 :::
 ```
 
+## Commodity research
+
+```{grid} 1 2 2 2
+:gutter: 3
+
+:::{grid-item-card} Corn futures indicator study
+:link: 21-corn-futures-indicator-study
+:link-type: doc
+Visual OHLCV indicator diagnostics, causal forward-return buckets, and simple strategy sanity checks for CME corn futures. Supports local Bloomberg data without committing licensed data.
+:::
+```
+
 ## Streaming & pipelines
 
 ```{grid} 1 2 2 3
@@ -181,4 +193,5 @@ Build a leak-safe training set with `forecast_pairs`, fit, and backtest.
 17-filtering-and-forecasting-with-uncertainty
 18-pairs-and-mean-reversion
 19-cycle-and-spectral-analysis
+21-corn-futures-indicator-study
 ```

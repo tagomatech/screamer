@@ -20,3 +20,8 @@ poetry run pytest --nbmake docs/notebooks/
 
 Open any `.ipynb` in Jupyter to read/edit. A notebook that computes an equality
 (e.g. batch == stream) asserts it in-cell, so a regression fails the run above.
+
+The commodity research notebook (`21-corn-futures-indicator-study.ipynb`) is
+different: Bloomberg data is licensed and must remain local. It defaults to a
+clearly labelled deterministic demo fixture for rendering; set `SOURCE` to
+`bloomberg` or `local` for an actual study.
