@@ -223,80 +223,78 @@ def indicator_guide_frame() -> pd.DataFrame:
     return pd.DataFrame(INDICATOR_GUIDE).set_index("key")
 
 
-def _bind_indicator_crosshair(fig: go.Figure) -> go.FigureWidget:
-    """Add a paper-spanning hover cursor to a two-row FigureWidget.
-
-    A shape using ``yref='paper'`` covers the complete plotting area, so it
-    crosses independent y-axis domains without adding an opaque overlay trace.
-    FigureWidget hover callbacks are used because ordinary Plotly figures only
-    draw spike lines inside the subplot currently under the pointer.
-    """
-    widget = go.FigureWidget(fig)
-    static_shapes = tuple(widget.layout.shapes or ())
-
-    def _point_x(trace, points):
-        point_indices = getattr(points, "point_inds", ())
-        if point_indices:
-            return trace.x[point_indices[0]]
-        xs = getattr(points, "xs", ())
-        return xs[0] if xs else None
-
-    def _cursor_shape(x):
-        return {
-            "type": "line",
-            "xref": "x",
-            "yref": "paper",
-            "x0": x,
-            "x1": x,
-            "y0": 0,
-            "y1": 1,
-            "line": {"color": "#777", "width": 1, "dash": "dot"},
-            "layer": "above",
-        }
-
-    def _on_hover(trace, points, _selector):
-        x = _point_x(trace, points)
-        if x is not None:
-            with widget.batch_update():
-                widget.layout.shapes = static_shapes + (_cursor_shape(x),)
-
-    def _on_unhover(_trace, _points, _selector):
-        widget.layout.shapes = static_shapes
-
-    for trace in widget.data:
-        trace.on_hover(_on_hover)
-        trace.on_unhover(_on_unhover)
-    return widget
-
-
-def indicator_figure(frame: pd.DataFrame, key: str) -> go.FigureWidget:
+def indicator_figure(frame: pd.DataFrame, key: str) -> go.Figure:
     """Plot one indicator in its own price-linked panel."""
     spec = next(item for item in INDICATOR_GUIDE if item["key"] == key)
-    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.06, row_heights=[0.48, 0.52], subplot_titles=("Corn price (rebased to 100)", f"{spec['label']} · {spec['operator']}"))
+    fig = go.Figure()
     price = 100.0 * frame["close"] / frame["close"].dropna().iloc[0]
-    fig.add_trace(go.Scatter(x=frame.index, y=price, name="price", line={"color": "#264653", "width": 1.5}), row=1, col=1)
+    fig.add_trace(go.Scatter(x=frame.index, y=price, name="price", xaxis="x", yaxis="y", line={"color": "#264653", "width": 1.5}))
     if key == "adx":
         for column, label, color in [("plus_di", "+DI", "#2a9d8f"), ("minus_di", "−DI", "#d1495b"), ("adx", "ADX", "#264653")]:
-            fig.add_trace(go.Scatter(x=frame.index, y=frame[column], name=label, line={"color": color, "width": 1.5}), row=2, col=1)
+            fig.add_trace(go.Scatter(x=frame.index, y=frame[column], name=label, xaxis="x", yaxis="y2", line={"color": color, "width": 1.5}))
     elif key == "open_interest":
-        fig.add_trace(go.Scatter(x=frame.index, y=frame[key], name=spec["label"], line={"color": "#f4a261", "width": 1.5}), row=2, col=1)
+        fig.add_trace(go.Scatter(x=frame.index, y=frame[key], name=spec["label"], xaxis="x", yaxis="y2", line={"color": "#f4a261", "width": 1.5}))
     else:
-        fig.add_trace(go.Scatter(x=frame.index, y=frame[key], name=spec["label"], line={"color": "#7b2cbf", "width": 1.6}), row=2, col=1)
-    fig.add_hline(y=0, line_color="#999", line_width=1, row=2, col=1)
-    fig.update_yaxes(title_text="rebased price", row=1, col=1)
-    fig.update_yaxes(title_text="value", row=2, col=1)
-    fig.update_xaxes(showspikes=False)
+        fig.add_trace(go.Scatter(x=frame.index, y=frame[key], name=spec["label"], xaxis="x", yaxis="y2", line={"color": "#7b2cbf", "width": 1.6}))
     fig.update_layout(
         title=f"{spec['group']} · {spec['label']}",
         template="plotly_white",
         height=560,
         hovermode="x unified",
-        hoversubplots="axis",
+        spikedistance=-1,
+        xaxis={
+            "domain": [0, 1],
+            "anchor": "y2",
+            "showspikes": True,
+            "spikemode": "across",
+            "spikesnap": "cursor",
+            "spikedash": "dot",
+            "spikethickness": 1,
+            "spikecolor": "#777",
+            "rangeslider": {"visible": False},
+        },
+        yaxis={"domain": [0.5488, 1], "title": "rebased price"},
+        yaxis2={"domain": [0, 0.4888], "title": "value"},
+        shapes=[
+            {
+                "type": "line",
+                "xref": "paper",
+                "yref": "y2",
+                "x0": 0,
+                "x1": 1,
+                "y0": 0,
+                "y1": 0,
+                "line": {"color": "#999", "width": 1},
+            }
+        ],
+        annotations=[
+            {
+                "text": "Corn price (rebased to 100)",
+                "xref": "paper",
+                "yref": "paper",
+                "x": 0.5,
+                "y": 1,
+                "xanchor": "center",
+                "yanchor": "bottom",
+                "showarrow": False,
+                "font": {"size": 16},
+            },
+            {
+                "text": f"{spec['label']} · {spec['operator']}",
+                "xref": "paper",
+                "yref": "paper",
+                "x": 0.5,
+                "y": 0.4888,
+                "xanchor": "center",
+                "yanchor": "bottom",
+                "showarrow": False,
+                "font": {"size": 16},
+            },
+        ],
         legend={"orientation": "h", "y": 1.03, "x": 0},
         margin={"l": 55, "r": 35, "t": 95, "b": 40},
-        xaxis_rangeslider_visible=False,
     )
-    return _bind_indicator_crosshair(fig)
+    return fig
 
 
 def decile_table(frame: pd.DataFrame, horizon: int = 5, buckets: int = 5) -> pd.DataFrame:
