@@ -31,10 +31,16 @@ def normalize_ohlcv(frame: pd.DataFrame) -> pd.DataFrame:
     """Normalize Bloomberg or local OHLCV data to a strict datetime-indexed frame."""
     data = frame.copy()
     if not isinstance(data.index, pd.DatetimeIndex):
-        timestamp = next((column for column in data.columns if str(column).lower() in {"date", "datetime", "timestamp", "time"}), None)
-        if timestamp is None:
-            raise ValueError("OHLCV data needs a DatetimeIndex or date/timestamp column")
-        data = data.set_index(timestamp)
+        # xbbg may return a plain Index of datetime.date objects, while CSV
+        # exports often carry an explicit date column. Accept both forms.
+        parsed_index = pd.to_datetime(data.index, errors="coerce")
+        if not parsed_index.isna().any():
+            data.index = parsed_index
+        else:
+            timestamp = next((column for column in data.columns if str(column).lower() in {"date", "datetime", "timestamp", "time"}), None)
+            if timestamp is None:
+                raise ValueError("OHLCV data needs a DatetimeIndex or date/timestamp column")
+            data = data.set_index(timestamp)
 
     data.columns = _flatten_columns(data.columns)
     aliases = {
