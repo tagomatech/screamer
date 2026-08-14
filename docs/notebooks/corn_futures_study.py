@@ -18,6 +18,7 @@ from plotly.subplots import make_subplots
 
 BLOOMBERG_FIELDS = ["PX_OPEN", "PX_HIGH", "PX_LOW", "PX_LAST", "VOLUME", "OPEN_INT"]
 OHLCV_COLUMNS = ["open", "high", "low", "close", "volume", "open_interest"]
+INTRADAY_INTERVALS = {"1h": 60, "60min": 60}
 
 
 def _flatten_columns(columns) -> list[str]:
@@ -94,6 +95,65 @@ def load_bloomberg_daily(ticker: str, start_date: str, end_date: str) -> pd.Data
     return normalize_ohlcv(raw)
 
 
+def load_bloomberg_intraday(
+    ticker: str,
+    start_date: str,
+    end_date: str,
+    interval_minutes: int = 60,
+    session: str = "allday",
+    typ: str = "TRADE",
+    max_calendar_days: int = 120,
+) -> pd.DataFrame:
+    """Read Bloomberg intraday bars one calendar day at a time.
+
+    Bloomberg's intraday-bar service is a bounded recent-history endpoint, so
+    this deliberately refuses an accidentally enormous request. The daily
+    BDH loader remains the correct path for multi-year regime studies.
+    """
+    try:
+        from xbbg import blp
+    except ImportError as exc:  # pragma: no cover - depends on local terminal setup
+        raise ImportError("Install xbbg/blpapi in the notebook environment") from exc
+    interval_minutes = int(interval_minutes)
+    if not 1 <= interval_minutes <= 1_440:
+        raise ValueError("interval_minutes must be between 1 and 1440")
+    start = pd.Timestamp(start_date).normalize()
+    end = pd.Timestamp(end_date).normalize()
+    if end < start:
+        raise ValueError("end_date must not precede start_date")
+    days = pd.date_range(start, end, freq="D")
+    if len(days) > max_calendar_days:
+        raise ValueError(
+            f"intraday request spans {len(days)} calendar days; choose at most "
+            f"{max_calendar_days} days for Bloomberg BDIB history"
+        )
+
+    chunks = []
+    errors = []
+    for day in days:
+        try:
+            raw = blp.bdib(
+                ticker=ticker,
+                dt=day.date(),
+                session=session,
+                typ=typ,
+                interval=interval_minutes,
+            )
+        except Exception as exc:  # pragma: no cover - terminal/API dependent
+            errors.append(f"{day.date()}: {exc}")
+            continue
+        if raw is not None and not raw.empty:
+            chunks.append(normalize_ohlcv(raw))
+    if not chunks:
+        detail = errors[0] if errors else "Bloomberg returned no bars"
+        raise ValueError(f"Bloomberg returned no intraday rows for {ticker!r}: {detail}")
+    if errors:
+        warnings.warn(f"Skipped {len(errors)} Bloomberg intraday day(s); first error: {errors[0]}", RuntimeWarning)
+    data = normalize_ohlcv(pd.concat(chunks, axis=0))
+    end_exclusive = end + pd.Timedelta(days=1)
+    return data.loc[(data.index >= start) & (data.index < end_exclusive)]
+
+
 def make_demo_data(start: str = "2018-01-01", periods: int = 1_900, seed: int = 7) -> pd.DataFrame:
     """Create a deterministic corn-like OHLCV fixture for notebook smoke tests only."""
     rng = np.random.default_rng(seed)
@@ -114,7 +174,14 @@ def make_demo_data(start: str = "2018-01-01", periods: int = 1_900, seed: int = 
     return pd.DataFrame({"open": open_, "high": high, "low": low, "close": close, "volume": volume, "open_interest": open_interest}, index=index)
 
 
-def load_dataset(source: str, ticker: str, start_date: str, end_date: str, local_path: str | Path | None = None) -> tuple[pd.DataFrame, str]:
+def load_dataset(
+    source: str,
+    ticker: str,
+    start_date: str,
+    end_date: str,
+    local_path: str | Path | None = None,
+    frequency: str = "1D",
+) -> tuple[pd.DataFrame, str]:
     """Load data and return ``(frame, provenance_label)``.
 
     ``source='auto'`` tries Bloomberg, then a local file, then the clearly
@@ -128,11 +195,17 @@ def load_dataset(source: str, ticker: str, start_date: str, end_date: str, local
             raise ValueError("local_path is required when source='local'")
         return load_local(local_path), f"LOCAL FILE — {Path(local_path).name}"
     if source == "bloomberg":
-        return load_bloomberg_daily(ticker, start_date, end_date), f"BLOOMBERG — {ticker}"
+        if frequency in INTRADAY_INTERVALS:
+            interval = INTRADAY_INTERVALS[frequency]
+            return load_bloomberg_intraday(ticker, start_date, end_date, interval), f"BLOOMBERG BDIB {frequency} — {ticker}"
+        return load_bloomberg_daily(ticker, start_date, end_date), f"BLOOMBERG BDH daily — {ticker}"
     if source != "auto":
         raise ValueError("source must be one of: auto, bloomberg, local, demo")
     try:
-        return load_bloomberg_daily(ticker, start_date, end_date), f"BLOOMBERG — {ticker}"
+        if frequency in INTRADAY_INTERVALS:
+            interval = INTRADAY_INTERVALS[frequency]
+            return load_bloomberg_intraday(ticker, start_date, end_date, interval), f"BLOOMBERG BDIB {frequency} — {ticker}"
+        return load_bloomberg_daily(ticker, start_date, end_date), f"BLOOMBERG BDH daily — {ticker}"
     except Exception as exc:  # pragma: no cover - environment dependent
         warnings.warn(f"Bloomberg unavailable ({exc}); trying local/demo data", RuntimeWarning)
     if local_path is not None and Path(local_path).exists():

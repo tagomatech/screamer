@@ -24,4 +24,7 @@ Open any `.ipynb` in Jupyter to read/edit. A notebook that computes an equality
 The commodity research notebook (`21-corn-futures-indicator-study.ipynb`) is
 different: Bloomberg data is licensed and must remain local. It includes a
 clearly labelled deterministic demo fixture for rendering; set `SOURCE` to
-`bloomberg` or `local` for an actual study.
+`bloomberg` or `local` for an actual study. For the intraday version, set
+`FREQUENCY = '60min'`, pass `frequency=FREQUENCY` to `load_dataset`, and use a
+recent window (the Bloomberg BDIB helper intentionally bounds requests to 120
+calendar days). The daily BDH path remains available for the long regime study.
