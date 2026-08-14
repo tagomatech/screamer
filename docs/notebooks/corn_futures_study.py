@@ -192,6 +192,57 @@ def compute_features(data: pd.DataFrame, window: int = 20, long_window: int = 60
 SIGNAL_COLUMNS = {"Trend slope": "trend_slope_pct", "Z-score": "zscore", "RSI − 50": "rsi", "VWAP distance": "vwap_distance_bps", "ADX": "adx", "NATR": "natr_pct"}
 
 
+INDICATOR_GUIDE = [
+    {"key": "low_lag", "group": "Trend", "label": "Low-lag level", "operator": "RollingPoly1(60, 0)", "formula": "Right-edge value of a trailing linear fit.", "corn_test": "Does it turn earlier than a plain moving average without producing false reversals around limit moves?"},
+    {"key": "trend_forecast", "group": "Trend", "label": "Trend forecast", "operator": "RollingTSF(60)", "formula": "Trailing linear-fit forecast at the current bar.", "corn_test": "Does the forecast-minus-price gap predict continuation over 1–5 sessions after weather or report shocks?"},
+    {"key": "trend_slope_pct", "group": "Trend", "label": "Normalized trend slope", "operator": "RollingPoly1(60, 1) / close", "formula": "Linear-fit slope divided by price, expressed in percent per bar.", "corn_test": "Is the sign persistent across planting, pollination, and harvest regimes, or only a delayed price trend?"},
+    {"key": "kama", "group": "Trend", "label": "Adaptive trend", "operator": "KAMA(60)", "formula": "Kaufman adaptive average; smoothing increases with directional efficiency.", "corn_test": "Does it stay smooth in choppy summer trade yet follow genuine crop-supply repricing faster?"},
+    {"key": "vwap", "group": "Trend / value", "label": "Rolling VWAP", "operator": "RollingVWAP(20)", "formula": "Volume-weighted typical price over the trailing window.", "corn_test": "Do large deviations mean-revert, and does that relationship survive roll and delivery-month changes?"},
+    {"key": "atr", "group": "Volatility", "label": "Average true range", "operator": "ATR(20)", "formula": "Wilder-smoothed max of range and gaps.", "corn_test": "Does ATR forecast the next session’s range well enough to improve stops and position sizing?"},
+    {"key": "natr_pct", "group": "Volatility", "label": "Normalized ATR", "operator": "NATR(20)", "formula": "100 × ATR / close.", "corn_test": "Does it identify high-risk report/weather regimes consistently across price levels?"},
+    {"key": "gk_vol", "group": "Volatility", "label": "Garman–Klass volatility", "operator": "RollingGarmanKlassVol(20)", "formula": "OHLC range estimator using log(H/L) and log(C/O).", "corn_test": "Is it more efficient than close-to-close volatility for corn’s intraday range, or distorted by overnight gaps?"},
+    {"key": "rs_vol", "group": "Volatility", "label": "Rogers–Satchell volatility", "operator": "RollingRogersSatchellVol(20)", "formula": "Drift-robust OHLC range estimator.", "corn_test": "Does it remain informative during directional rallies and selloffs where Parkinson/GK can misread drift?"},
+    {"key": "yz_vol", "group": "Volatility", "label": "Yang–Zhang volatility", "operator": "RollingYangZhangVol(20)", "formula": "Combines overnight, open-to-close, and Rogers–Satchell components.", "corn_test": "Does its treatment of overnight gaps help around USDA releases and the reopen after Globex breaks?"},
+    {"key": "rsi", "group": "Momentum", "label": "RSI", "operator": "RollingRSI(14)", "formula": "Wilder-smoothed ratio of recent gains to losses.", "corn_test": "Are extreme readings mean-reverting in quiet ranges but continuation signals in supply shocks?"},
+    {"key": "roc", "group": "Momentum", "label": "Rate of change", "operator": "ROC(20)", "formula": "Percentage price change over 20 bars.", "corn_test": "Does the magnitude separate sustained repricing from one-day report gaps?"},
+    {"key": "momentum", "group": "Momentum", "label": "Momentum", "operator": "Momentum(20)", "formula": "Current close minus the close 20 bars ago.", "corn_test": "Does the absolute-dollar signal remain comparable across contract price levels, or should it be normalized?"},
+    {"key": "trix", "group": "Momentum", "label": "TRIX", "operator": "TRIX(20)", "formula": "Rate of change of a triple-smoothed price.", "corn_test": "Does the extra smoothing improve multi-session signal quality enough to justify its delay?"},
+    {"key": "zscore", "group": "Momentum / value", "label": "Rolling z-score", "operator": "RollingZscore(60)", "formula": "Distance from rolling mean in rolling standard deviations.", "corn_test": "Do extreme deviations mean-revert only inside a stable seasonal regime, or across all corn regimes?"},
+    {"key": "plus_di", "group": "Trend strength", "label": "+DI", "operator": "ADX(14)[0]", "formula": "Smoothed positive directional movement scaled by true range.", "corn_test": "Does +DI lead sustained upward moves, or merely confirm bars that already moved?"},
+    {"key": "minus_di", "group": "Trend strength", "label": "−DI", "operator": "ADX(14)[1]", "formula": "Smoothed negative directional movement scaled by true range.", "corn_test": "Does −DI identify persistent downside supply shocks rather than ordinary two-sided noise?"},
+    {"key": "adx", "group": "Trend strength", "label": "ADX", "operator": "ADX(14)[2]", "formula": "Smoothed directional-index separation; strength, not direction.", "corn_test": "Does a high ADX tell us when trend-following beats mean-reversion, conditional on direction?"},
+    {"key": "obv", "group": "Volume", "label": "On-balance volume", "operator": "OBV()", "formula": "Cumulative volume signed by close-to-close direction.", "corn_test": "Does volume confirmation distinguish genuine participation from price moves on thin holiday trade?"},
+    {"key": "mfi", "group": "Volume", "label": "Money flow index", "operator": "MFI(14)", "formula": "RSI-like oscillator using typical price and volume.", "corn_test": "Do extreme money-flow readings anticipate exhaustion around crop-report repricing?"},
+    {"key": "adosc", "group": "Volume", "label": "Accumulation/distribution oscillator", "operator": "ADOSC(3, 10)", "formula": "Fast-minus-slow average of close-location-value money flow.", "corn_test": "Does intrabar close location plus volume add information beyond the close and volume separately?"},
+    {"key": "open_interest", "group": "Futures context", "label": "Open interest", "operator": "Bloomberg field OPEN_INT", "formula": "Contracts outstanding; not a Screamer indicator.", "corn_test": "Does price-plus-open-interest classification improve regime labels around rolls and new-crop positioning?"},
+]
+
+
+def indicator_guide_frame() -> pd.DataFrame:
+    """Return the study's formula and corn-specific diagnostic guide."""
+    return pd.DataFrame(INDICATOR_GUIDE).set_index("key")
+
+
+def indicator_figure(frame: pd.DataFrame, key: str) -> go.Figure:
+    """Plot one indicator in its own price-linked panel."""
+    spec = next(item for item in INDICATOR_GUIDE if item["key"] == key)
+    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.06, row_heights=[0.48, 0.52], subplot_titles=("Corn price (rebased to 100)", f"{spec['label']} · {spec['operator']}"))
+    price = 100.0 * frame["close"] / frame["close"].dropna().iloc[0]
+    fig.add_trace(go.Scatter(x=frame.index, y=price, name="price", line={"color": "#264653", "width": 1.5}), row=1, col=1)
+    if key == "adx":
+        for column, label, color in [("plus_di", "+DI", "#2a9d8f"), ("minus_di", "−DI", "#d1495b"), ("adx", "ADX", "#264653")]:
+            fig.add_trace(go.Scatter(x=frame.index, y=frame[column], name=label, line={"color": color, "width": 1.5}), row=2, col=1)
+    elif key == "open_interest":
+        fig.add_trace(go.Scatter(x=frame.index, y=frame[key], name=spec["label"], line={"color": "#f4a261", "width": 1.5}), row=2, col=1)
+    else:
+        fig.add_trace(go.Scatter(x=frame.index, y=frame[key], name=spec["label"], line={"color": "#7b2cbf", "width": 1.6}), row=2, col=1)
+    fig.add_hline(y=0, line_color="#999", line_width=1, row=2, col=1)
+    fig.update_yaxes(title_text="rebased price", row=1, col=1)
+    fig.update_yaxes(title_text="value", row=2, col=1)
+    fig.update_layout(title=f"{spec['group']} · {spec['label']}", template="plotly_white", height=560, hovermode="x unified", legend={"orientation": "h", "y": 1.03, "x": 0}, margin={"l": 55, "r": 35, "t": 95, "b": 40}, xaxis_rangeslider_visible=False)
+    return fig
+
+
 def decile_table(frame: pd.DataFrame, horizon: int = 5, buckets: int = 5) -> pd.DataFrame:
     """Return mean forward returns by indicator bucket for visual diagnostics."""
     rows = []
