@@ -281,6 +281,7 @@ def indicator_figure(frame: pd.DataFrame, key: str) -> go.Figure:
             "domain": [0, 1],
             "anchor": "y3",
             "matches": "x2",
+            "layer": "below traces",
             "showticklabels": False,
             "showgrid": False,
             "zeroline": False,
@@ -294,6 +295,7 @@ def indicator_figure(frame: pd.DataFrame, key: str) -> go.Figure:
         },
         yaxis3={
             "domain": [0, 1],
+            "layer": "below traces",
             "showticklabels": False,
             "showgrid": False,
             "zeroline": False,
