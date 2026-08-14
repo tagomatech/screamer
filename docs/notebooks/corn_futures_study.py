@@ -239,10 +239,70 @@ def indicator_figure(frame: pd.DataFrame, key: str) -> go.Figure:
     fig.add_hline(y=0, line_color="#999", line_width=1, row=2, col=1)
     fig.update_yaxes(title_text="rebased price", row=1, col=1)
     fig.update_yaxes(title_text="value", row=2, col=1)
-    # Shared x-axis spikes create one time cursor across both subplots. The
-    # hover label is unified as well, so price and indicator read together.
-    fig.update_xaxes(showspikes=True, spikemode="across", spikesnap="cursor", spikedash="dot", spikethickness=1, spikecolor="#777")
-    fig.update_layout(title=f"{spec['group']} · {spec['label']}", template="plotly_white", height=560, hovermode="x unified", hoversubplots="axis", spikedistance=-1, legend={"orientation": "h", "y": 1.03, "x": 0}, margin={"l": 55, "r": 35, "t": 95, "b": 40}, xaxis_rangeslider_visible=False)
+    # Plotly's native x-axis spike is limited to the subplot under the
+    # pointer. A transparent, full-height trace provides one hover target for
+    # both panels and its x-axis spike consequently spans both y-domains.
+    hover_series = [(price, "price", ".2f")]
+    if key == "adx":
+        hover_series.extend(
+            [
+                (frame["plus_di"], "+DI", ".3f"),
+                (frame["minus_di"], "−DI", ".3f"),
+                (frame["adx"], "ADX", ".3f"),
+            ]
+        )
+    else:
+        hover_series.append((frame[key], spec["label"], ".3f" if key != "open_interest" else ".0f"))
+    customdata = np.column_stack([series.to_numpy(dtype=float) for series, _, _ in hover_series])
+    date_format = "%{x|%Y-%m-%d}" if isinstance(frame.index, pd.DatetimeIndex) else "%{x}"
+    hover_lines = [f"{label}: %{{customdata[{column}]:{format_spec}}}" for column, (_, label, format_spec) in enumerate(hover_series)]
+    fig.add_trace(
+        go.Scatter(
+            x=frame.index,
+            y=np.full(len(frame), 0.5),
+            xaxis="x3",
+            yaxis="y3",
+            mode="markers",
+            marker={"size": 20, "color": "rgba(0,0,0,0)"},
+            customdata=customdata,
+            hovertemplate="<b>" + date_format + "</b><br>" + "<br>".join(hover_lines) + "<extra></extra>",
+            name="_crosshair",
+            showlegend=False,
+        )
+    )
+    fig.update_xaxes(showspikes=False)
+    fig.update_layout(
+        title=f"{spec['group']} · {spec['label']}",
+        template="plotly_white",
+        height=560,
+        hovermode="x unified",
+        spikedistance=-1,
+        xaxis3={
+            "domain": [0, 1],
+            "anchor": "y3",
+            "matches": "x2",
+            "showticklabels": False,
+            "showgrid": False,
+            "zeroline": False,
+            "showline": False,
+            "showspikes": True,
+            "spikemode": "across",
+            "spikesnap": "cursor",
+            "spikedash": "dot",
+            "spikethickness": 1,
+            "spikecolor": "#777",
+        },
+        yaxis3={
+            "domain": [0, 1],
+            "showticklabels": False,
+            "showgrid": False,
+            "zeroline": False,
+            "showline": False,
+        },
+        legend={"orientation": "h", "y": 1.03, "x": 0},
+        margin={"l": 55, "r": 35, "t": 95, "b": 40},
+        xaxis_rangeslider_visible=False,
+    )
     return fig
 
 
