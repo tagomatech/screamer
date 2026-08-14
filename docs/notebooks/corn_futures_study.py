@@ -239,7 +239,10 @@ def indicator_figure(frame: pd.DataFrame, key: str) -> go.Figure:
     fig.add_hline(y=0, line_color="#999", line_width=1, row=2, col=1)
     fig.update_yaxes(title_text="rebased price", row=1, col=1)
     fig.update_yaxes(title_text="value", row=2, col=1)
-    fig.update_layout(title=f"{spec['group']} · {spec['label']}", template="plotly_white", height=560, hovermode="x unified", legend={"orientation": "h", "y": 1.03, "x": 0}, margin={"l": 55, "r": 35, "t": 95, "b": 40}, xaxis_rangeslider_visible=False)
+    # Shared x-axis spikes create one time cursor across both subplots. The
+    # hover label is unified as well, so price and indicator read together.
+    fig.update_xaxes(showspikes=True, spikemode="across", spikesnap="cursor", spikedash="dot", spikethickness=1, spikecolor="#777")
+    fig.update_layout(title=f"{spec['group']} · {spec['label']}", template="plotly_white", height=560, hovermode="x unified", hoversubplots="axis", spikedistance=-1, legend={"orientation": "h", "y": 1.03, "x": 0}, margin={"l": 55, "r": 35, "t": 95, "b": 40}, xaxis_rangeslider_visible=False)
     return fig
 
 
